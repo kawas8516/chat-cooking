@@ -1,0 +1,31 @@
+[
+    {
+      "input": "What can I cook with tomatoes and cheese?",
+      "output": "You can make a Margherita pizza, tomato and cheese salad, or grilled cheese with tomato soup."
+    },
+    {
+      "input": "How do I store fresh herbs?",
+      "output": "Wrap fresh herbs in a damp paper towel, place them in a plastic bag, and store them in the fridge."
+    },
+    {
+      "input": "What’s a good way to use leftover rice?",
+      "output": "You can make fried rice, rice pudding, or add it to soup for extra texture."
+    },
+    {
+      "input": "How long can I store cooked chicken in the fridge?",
+      "output": "Cooked chicken lasts 3-4 days in the fridge when stored in an airtight container."
+    },
+    {
+      "input": "Can I freeze bananas?",
+      "output": "Yes! Peel and slice them, then freeze them in a zip-lock bag for smoothies or baking."
+    },
+    {
+      "input": "What can I do with stale bread?",
+      "output": "Use stale bread for croutons, bread pudding, or homemade breadcrumbs."
+    },
+    {
+      "input": "How do I keep carrots fresh for longer?",
+      "output": "Store carrots in a container of water in the fridge to keep them crisp for weeks."
+    }
+  ]
+  
