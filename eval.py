@@ -14,8 +14,6 @@ import argparse
 import json
 import textwrap
 
-import pandas as pd
-
 from rag import is_recipe_query, retrieve
 from config import TOP_K
 
