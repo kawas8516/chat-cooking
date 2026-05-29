@@ -1,9 +1,16 @@
 """Gradio Blocks app for the cooking chatbot."""
+import os
 import gradio as gr
 
 import config
 from llm import build_messages, stream_response
 from rag import is_recipe_query, retrieve
+
+# Build index on first boot if it doesn't exist (HF Spaces doesn't store binaries in git)
+if not os.path.exists(config.INDEX_PATH):
+    print("Index not found — building now...")
+    import build_index
+    build_index.main()
 
 EXAMPLE_PROMPTS = [
     "How do I make pasta carbonara?",
