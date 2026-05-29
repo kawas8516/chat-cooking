@@ -24,7 +24,9 @@ def main() -> None:
     df = pd.read_csv(CSV_PATH)
     before = len(df)
     df = df.dropna(subset=["recipe_name"])
-    print(f"  {before} rows -> {len(df)} after dropping missing recipe_name")
+    df = df.drop_duplicates(subset=["recipe_name"])
+    df = df.reset_index(drop=True)
+    print(f"  {before} rows -> {len(df)} after dropping missing names and duplicates")
 
     df["combined_text"] = df.apply(build_combined_text, axis=1)
     texts = df["combined_text"].tolist()

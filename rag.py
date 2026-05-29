@@ -38,7 +38,10 @@ def get_index() -> faiss.Index:
 def get_recipes_df() -> pd.DataFrame:
     global _df
     if _df is None:
-        _df = pd.read_csv(config.CSV_PATH).dropna(subset=["recipe_name"]).reset_index(drop=True)
+        _df = (pd.read_csv(config.CSV_PATH)
+               .dropna(subset=["recipe_name"])
+               .drop_duplicates(subset=["recipe_name"])
+               .reset_index(drop=True))
     return _df
 
 
