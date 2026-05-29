@@ -34,12 +34,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Push to HF Space
+      - name: Push to HF Space (orphan — no binary history)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
+          git config user.email "ci@github-actions"
+          git config user.name "GitHub Actions"
+          git checkout --orphan hf-deploy
+          git add -A
+          git commit -m "Deploy from ${{ github.sha }}"
           git remote add hf-space https://kawas8516:$HF_TOKEN@huggingface.co/spaces/kawas8516/chat-cooking.git
-          git push hf-space main --force
+          git push hf-space hf-deploy:main --force
