@@ -10,7 +10,7 @@ app_file: app.py
 pinned: false
 ---
 
-# Chat Cooking
+# Chat Cooking [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/kawas8516/chat-cooking)
 
 A cooking assistant chatbot powered by **RAG (Retrieval-Augmented Generation)**. Ask about recipes, ingredients, or cooking techniques — it semantically retrieves relevant recipes from a dataset of 1,090 dishes and streams a grounded response via the HuggingFace Inference API.
 
