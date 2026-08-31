@@ -28,6 +28,11 @@ RECIPE_PHRASE_PATTERNS = [
     # "make" alone is too generic ("what should we make of this") — only a
     # recipe signal when paired with "with" ("what can I make with eggs...").
     r"\bwhat\b.{0,20}\b(can|could)\b.{0,15}\b(i|we)\b.{0,15}\bmake\b.{0,10}\bwith\b",
+    # "how do I make X" is a very common recipe phrasing ("make" isn't a bare
+    # keyword, but this shape is unambiguous enough) — idioms it might catch
+    # ("how do I make sense/friends/a decision/...") are excluded via
+    # NEGATIVE_PHRASE_PATTERNS below, checked first.
+    r"\bhow\b.{0,15}\b(do|does|can|could|would)\b.{0,15}\b(i|you|we)\b.{0,15}\bmake\b",
     r"\b(something|anything)\b.{0,15}\bto\b.{0,15}\b(eat|cook|make|prepare)\b",
     r"\bwhip(?:ping)?\s+up\b",
     r"\bgoes\s+(?:well\s+)?with\b",
@@ -43,7 +48,7 @@ NEGATIVE_PHRASE_PATTERNS = [
     r"\bmakes?\s+sense\b",
     r"\bmake\s+(a\s+)?decision\b",
     r"\bmake\s+friends\b",
-    r"\bmake\s+(my|your|his|her|their|our)\s+(day|code|essay|paragraph|point|case)\b",
+    r"\bmake\s+(my|your|his|her|their|our|this|that|the)\s+(day|code|essay|paragraph|point|case)\b",
     r"\beat\s+(my|your|his|her|their|our)\s+words\b",
     r"\bfood\s+for\s+thought\b",
     r"\bprepare\s+(a\s+)?presentation\b",

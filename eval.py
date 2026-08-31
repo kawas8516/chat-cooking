@@ -46,6 +46,7 @@ CLASSIFIER_CASES: list[tuple[str, bool]] = [
     ("Suggest something for me to eat",            True),
     ("Any ideas for a quick lunch?",                True),
     ("What's for dinner tonight?",                 True),
+    ("How do I make mulligatawny soup?",           True),
     # idioms using recipe-adjacent verbs non-literally (should stay negative)
     ("Can you make this paragraph shorter?",       False),
     ("How do I make friends in a new city?",       False),

@@ -92,6 +92,9 @@ class TestIsRecipeQuery:
     def test_regression_make_with_ingredients_still_positive(self):
         assert rag.is_recipe_query("What can I make with eggs and cheese?") is True
 
+    def test_positive_how_do_i_make(self):
+        assert rag.is_recipe_query("How do I make mulligatawny soup?") is True
+
     def test_negative_make_sense_idiom(self):
         assert rag.is_recipe_query("That decision doesn't make sense to me") is False
 

@@ -104,6 +104,11 @@ class TestStreamResponse:
         chunk.choices[0].delta.content = token
         return chunk
 
+    def _make_empty_choices_chunk(self):
+        chunk = MagicMock()
+        chunk.choices = []
+        return chunk
+
     def test_yields_tokens(self):
         chunks = [self._make_chunk(t) for t in ["Hello", " world", "!"]]
         mock_client = MagicMock()
@@ -116,6 +121,18 @@ class TestStreamResponse:
 
     def test_skips_none_tokens(self):
         chunks = [self._make_chunk("hi"), self._make_chunk(None), self._make_chunk("!")]
+        mock_client = MagicMock()
+        mock_client.chat_completion.return_value = iter(chunks)
+
+        with patch.object(llm, "_get_client", return_value=mock_client):
+            tokens = list(llm.stream_response([{"role": "user", "content": "hi"}]))
+
+        assert tokens == ["hi", "!"]
+
+    def test_skips_chunk_with_empty_choices(self):
+        # Some providers (e.g. Featherless AI) send a trailing chunk with an
+        # empty choices list (usage stats) to mark end-of-stream.
+        chunks = [self._make_chunk("hi"), self._make_empty_choices_chunk(), self._make_chunk("!")]
         mock_client = MagicMock()
         mock_client.chat_completion.return_value = iter(chunks)
 

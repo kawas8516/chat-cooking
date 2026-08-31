@@ -84,6 +84,10 @@ def stream_response(messages: list[dict]) -> Generator[str, None, None]:
                 stream=True,
             )
             for chunk in stream:
+                # Some providers send a trailing chunk (e.g. usage stats) with
+                # an empty choices list to mark end-of-stream.
+                if not chunk.choices:
+                    continue
                 token = chunk.choices[0].delta.content
                 if token:
                     yielded_any = True
