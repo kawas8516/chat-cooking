@@ -16,3 +16,10 @@ htmlcov/
 .coverage
 dist/
 build/
+
+# Editors / tooling
+.vscode/
+.idea/
+*.swp
+.claude/
+.ipynb_checkpoints/

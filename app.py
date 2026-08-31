@@ -4,7 +4,13 @@ import gradio as gr
 
 import config
 from llm import build_messages, stream_response
-from rag import is_recipe_query, retrieve
+from rag import build_retrieval_query, is_recipe_query, retrieve
+
+try:
+    config.validate()
+except config.ConfigError as e:
+    print(f"Configuration error:\n{e}")
+    raise SystemExit(1)
 
 # Build index on first boot if it doesn't exist (HF Spaces doesn't store binaries in git)
 if not os.path.exists(config.INDEX_PATH):
@@ -38,7 +44,8 @@ def _recipes_markdown(recipes: list[dict]) -> str:
 def chat(message: str, history: list[dict]):
     retrieved: list[dict] = []
     if is_recipe_query(message):
-        retrieved = retrieve(message, top_k=config.TOP_K)
+        query = build_retrieval_query(message, history)
+        retrieved = retrieve(query, top_k=config.TOP_K)
 
     messages = build_messages(message, retrieved, history)
 

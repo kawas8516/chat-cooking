@@ -49,6 +49,9 @@ Gradio UI                  chat panel (left) | retrieved recipes panel (right)
 | `all-MiniLM-L6-v2` embedder | 384-dim, fast on CPU, strong semantic recall for food queries |
 | Keyword classifier before retrieval | Avoids embedding cost and noisy retrieval on non-food questions |
 | Retrieved context injected as a second `system` message | Keeps it clearly separated from user history for the LLM |
+| Name + ingredients **and directions** sent as context | The model is told not to invent recipes, so it needs the actual steps to ground on |
+| `SCORE_THRESHOLD` gate on retrieval | Drops low-relevance matches so off-topic queries get a general answer, not spurious recipes |
+| Retrieval query includes the previous user turn | Follow-ups ("make it vegetarian") retrieve in the context of the original dish |
 | Index built at startup if missing | Binary files rejected by HF git; CSV stays in repo, index is ephemeral |
 
 ---
@@ -62,8 +65,12 @@ Measured on the 1,090-recipe dataset with `python eval.py`:
 | Classifier accuracy (14 labelled queries) | **100%** |
 | Retrieval Hit@3 (12 query/recipe pairs) | **92%** |
 | Retrieval MRR | **0.861** |
+| Top-1 retrieval score (mean / min) | **0.720 / 0.592** |
+| Faithfulness (6 cases, LLM-as-judge, `--faithfulness`) | **83%** |
 
-The one retrieval miss ("chocolate cherry dessert") is a data-coverage gap — no exact match exists in the 1,090-recipe subset. MRR of 0.861 means the correct recipe is ranked #1 on average.
+The one retrieval miss ("chocolate cherry dessert") is a data-coverage gap — no exact match exists in the 1,090-recipe subset. MRR of 0.861 means the correct recipe is ranked #1 on average. Mean top-1 similarity of 0.720 (min 0.592) sits comfortably above the `SCORE_THRESHOLD` of 0.3, so relevant queries always clear the relevance gate.
+
+Faithfulness is a small (6-case), non-deterministic LLM-judge check; the one miss adds a couple of plausible details (lemon juice, paprika) absent from the retrieved fish recipe.
 
 Run evaluation yourself:
 ```bash
@@ -115,6 +122,7 @@ python app.py               # open http://localhost:7860
 | `MODEL_ID` | `Qwen/Qwen2.5-7B-Instruct` | Generation model |
 | `EMBED_MODEL_ID` | `all-MiniLM-L6-v2` | Embedding model for retrieval |
 | `TOP_K` | `3` | Number of recipes retrieved per query |
+| `SCORE_THRESHOLD` | `0.3` | Min cosine similarity for a recipe to be used as context |
 | `MAX_NEW_TOKENS` | `512` | Max tokens per LLM response |
 | `TEMPERATURE` | `0.7` | Sampling temperature |
 

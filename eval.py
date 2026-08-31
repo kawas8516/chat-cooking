@@ -14,6 +14,7 @@ import argparse
 import json
 import textwrap
 
+import config
 from rag import is_recipe_query, retrieve
 from config import TOP_K
 
@@ -36,6 +37,26 @@ CLASSIFIER_CASES: list[tuple[str, bool]] = [
     ("What time is it?",                           False),
     ("How do I install Python?",                   False),
     ("What is the capital of France?",             False),
+    # paraphrases with no listed keyword (should still be positive)
+    ("I'm hungry, suggest something",              True),
+    ("What goes well with chicken?",               True),
+    ("Need something to whip up fast",             True),
+    ("What should I eat tonight?",                 True),
+    ("What can I whip up quickly?",                True),
+    ("Suggest something for me to eat",            True),
+    ("Any ideas for a quick lunch?",                True),
+    ("What's for dinner tonight?",                 True),
+    # idioms using recipe-adjacent verbs non-literally (should stay negative)
+    ("Can you make this paragraph shorter?",       False),
+    ("How do I make friends in a new city?",       False),
+    ("That decision doesn't make sense to me",     False),
+    ("I'll eat my words if I'm wrong",             False),
+    ("Food for thought: what do you think?",       False),
+    ("Let's prepare a presentation for Monday",    False),
+    ("Can you make a decision already?",           False),
+    ("This essay doesn't make sense",              False),
+    ("What time should we make the call?",         False),
+    ("Prepare yourself for the meeting",           False),
 ]
 
 # -- 2. Retrieval test cases ---------------------------------------------------
@@ -62,6 +83,9 @@ FAITHFULNESS_CASES = [
     "How do I make mulligatawny soup?",
     "Give me a recipe for waldorf salad",
     "How do I bake fish fillets?",
+    "How do I make German apple cake?",
+    "Give me a recipe for caramel apples",
+    "How do I make homemade apple cider?",
 ]
 
 
@@ -111,12 +135,16 @@ def run_retrieval_eval(k: int = TOP_K) -> dict:
     print(f"\n-- Layer 2: Retrieval quality (Hit@{k}, MRR) --------------------")
     hits = 0
     rr_sum = 0.0
+    top1_scores = []
     for query, keywords in RETRIEVAL_CASES:
-        results = retrieve(query, top_k=k)
+        # min_score=0 so the runtime relevance gate doesn't mask ranking quality.
+        results = retrieve(query, top_k=k, min_score=0.0)
         hit = _hit_at_k(results, keywords, k)
         rr = _reciprocal_rank(results, keywords)
         hits += int(hit)
         rr_sum += rr
+        if results:
+            top1_scores.append(results[0]["score"])
         label = "HIT " if hit else "MISS"
         top_names = [r["name"] for r in results[:k]]
         print(f"  [{label}] \"{query}\"")
@@ -125,9 +153,26 @@ def run_retrieval_eval(k: int = TOP_K) -> dict:
     n = len(RETRIEVAL_CASES)
     hit_rate = hits / n
     mrr = rr_sum / n
+    mean_top1 = sum(top1_scores) / len(top1_scores) if top1_scores else 0.0
+    min_top1 = min(top1_scores) if top1_scores else 0.0
+    max_top1 = max(top1_scores) if top1_scores else 0.0
     print(f"\n  Hit@{k}: {hits}/{n} = {hit_rate:.0%}")
     print(f"  MRR:    {mrr:.3f}")
-    return {"hit_at_k": hit_rate, "mrr": mrr, "k": k, "hits": hits, "total": n}
+    print(f"  Top-1 score  mean={mean_top1:.3f}  min={min_top1:.3f}  max={max_top1:.3f}")
+    return {
+        "hit_at_k": hit_rate, "mrr": mrr, "k": k, "hits": hits, "total": n,
+        "mean_top1_score": mean_top1, "min_top1_score": min_top1, "max_top1_score": max_top1,
+    }
+
+
+def _format_for_judge(r: dict) -> str:
+    """Mirror llm._format_retrieved's fields/truncation so the judge sees the
+    same grounding material the generator was given (including directions)."""
+    lines = [f"- {r['name']}: {r['ingredients'][:200]}"]
+    directions = r.get("directions", "").strip()
+    if directions:
+        lines.append(f"  Directions: {directions[:400]}")
+    return "\n".join(lines)
 
 
 def run_faithfulness_eval() -> dict:
@@ -150,7 +195,7 @@ def run_faithfulness_eval() -> dict:
         response = "".join(stream_response(messages))
 
         # Build judge prompt
-        context = "\n".join(f"- {r['name']}: {r['ingredients'][:150]}" for r in retrieved)
+        context = "\n".join(_format_for_judge(r) for r in retrieved)
         judge_messages = [
             {"role": "system", "content": JUDGE_PROMPT},
             {"role": "user", "content": (
@@ -187,6 +232,11 @@ def main():
     scores["classifier"] = run_classifier_eval()
     scores["retrieval"]  = run_retrieval_eval(k=args.k)
     if args.faithfulness:
+        try:
+            config.validate()
+        except config.ConfigError as e:
+            print(f"Configuration error:\n{e}")
+            raise SystemExit(1)
         scores["faithfulness"] = run_faithfulness_eval()
 
     print("\n-- Summary ------------------------------------------------------")

@@ -77,6 +77,53 @@ class TestIsRecipeQuery:
     def test_negative_math(self):
         assert rag.is_recipe_query("what is two plus two") is False
 
+    def test_positive_hungry_paraphrase(self):
+        assert rag.is_recipe_query("I'm hungry, suggest something") is True
+
+    def test_positive_goes_well_with(self):
+        assert rag.is_recipe_query("What goes well with chicken?") is True
+
+    def test_positive_whip_up_phrase(self):
+        assert rag.is_recipe_query("Need something to whip up fast") is True
+
+    def test_positive_what_should_i_eat(self):
+        assert rag.is_recipe_query("What should I eat tonight?") is True
+
+    def test_regression_make_with_ingredients_still_positive(self):
+        assert rag.is_recipe_query("What can I make with eggs and cheese?") is True
+
+    def test_negative_make_sense_idiom(self):
+        assert rag.is_recipe_query("That decision doesn't make sense to me") is False
+
+    def test_negative_make_friends_idiom(self):
+        assert rag.is_recipe_query("How do I make friends in a new city?") is False
+
+    def test_negative_eat_my_words_idiom(self):
+        assert rag.is_recipe_query("I'll eat my words if I'm wrong") is False
+
+    def test_negative_food_for_thought_idiom(self):
+        assert rag.is_recipe_query("Food for thought: what do you think?") is False
+
+    def test_negative_make_paragraph_idiom(self):
+        assert rag.is_recipe_query("Can you make this paragraph shorter?") is False
+
+
+class TestBuildRetrievalQuery:
+    def test_empty_history_returns_message(self):
+        assert rag.build_retrieval_query("vegan version", []) == "vegan version"
+
+    def test_prepends_last_user_turn(self):
+        history = [
+            {"role": "user", "content": "how do I make carbonara"},
+            {"role": "assistant", "content": "Here is a recipe..."},
+        ]
+        query = rag.build_retrieval_query("make it vegetarian", history)
+        assert query == "how do I make carbonara make it vegetarian"
+
+    def test_ignores_assistant_only_history(self):
+        history = [{"role": "assistant", "content": "hello"}]
+        assert rag.build_retrieval_query("soup", history) == "soup"
+
 
 class TestRetrieve:
     def test_returns_top_k(self, synthetic_index_and_df):
@@ -98,6 +145,15 @@ class TestRetrieve:
         results = rag.retrieve("salad", top_k=10)
         # Only 5 rows in synthetic data
         assert len(results) == 5
+
+    def test_threshold_filters_all(self, synthetic_index_and_df):
+        # Cosine scores can't exceed 1.0, so a threshold above 1 drops everything.
+        results = rag.retrieve("pasta recipe", top_k=3, min_score=1.1)
+        assert results == []
+
+    def test_threshold_zero_keeps_all(self, synthetic_index_and_df):
+        results = rag.retrieve("pasta recipe", top_k=3, min_score=-1.0)
+        assert len(results) == 3
 
     def test_empty_index(self, tmp_path, monkeypatch):
         dim = 4

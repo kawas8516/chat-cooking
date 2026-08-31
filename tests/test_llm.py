@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 
+import config
 import llm
 
 
@@ -54,10 +55,47 @@ class TestBuildMessages:
         assert roles[1] == "system"   # retrieved context
         assert roles[-1] == "user"
 
+    def test_retrieved_context_includes_directions(self):
+        msgs = llm.build_messages("pasta", SAMPLE_RETRIEVED, [])
+        context_msg = [m for m in msgs if m["role"] == "system" and "Retrieved" in m["content"]][0]
+        assert "boil pasta" in context_msg["content"]
+
     def test_retrieved_context_includes_url(self):
         msgs = llm.build_messages("pasta", SAMPLE_RETRIEVED, [])
         context_msg = [m for m in msgs if m["role"] == "system" and "Retrieved" in m["content"]][0]
         assert "http://example.com/carbonara" in context_msg["content"]
+
+    def test_history_truncated_to_max_turns(self, monkeypatch):
+        monkeypatch.setattr(config, "MAX_HISTORY_TURNS", 3)
+        history = []
+        for i in range(15):
+            history.append({"role": "user", "content": f"user turn {i}"})
+            history.append({"role": "assistant", "content": f"assistant turn {i}"})
+
+        msgs = llm.build_messages("now", [], history)
+        history_msgs = msgs[1:-1]  # drop leading system + trailing current user
+
+        assert len(history_msgs) == 6  # 3 turns * 2 messages
+        assert history_msgs == history[-6:]
+
+    def test_history_under_limit_not_truncated(self, monkeypatch):
+        monkeypatch.setattr(config, "MAX_HISTORY_TURNS", 10)
+        history = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi there"},
+        ]
+        msgs = llm.build_messages("now", [], history)
+        assert msgs[1:-1] == history
+
+    def test_zero_max_history_turns_drops_all_history(self, monkeypatch):
+        monkeypatch.setattr(config, "MAX_HISTORY_TURNS", 0)
+        history = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi there"},
+        ]
+        msgs = llm.build_messages("now", [], history)
+        roles = [m["role"] for m in msgs]
+        assert roles == ["system", "user"]
 
 
 class TestStreamResponse:
@@ -95,7 +133,7 @@ class TestStreamResponse:
         mock_client = MagicMock()
         mock_client.chat_completion.side_effect = error
 
-        with patch.object(llm, "_get_client", return_value=mock_client):
+        with patch.object(llm, "_get_client", return_value=mock_client), patch("llm.time.sleep"):
             tokens = list(llm.stream_response([]))
 
         assert len(tokens) == 1
@@ -110,8 +148,83 @@ class TestStreamResponse:
         mock_client = MagicMock()
         mock_client.chat_completion.side_effect = error
 
-        with patch.object(llm, "_get_client", return_value=mock_client):
+        with patch.object(llm, "_get_client", return_value=mock_client), patch("llm.time.sleep"):
             tokens = list(llm.stream_response([]))
 
         assert len(tokens) == 1
         assert "loading" in tokens[0].lower()
+
+    def test_retries_after_transient_429_then_succeeds(self, monkeypatch):
+        from huggingface_hub.errors import HfHubHTTPError
+        monkeypatch.setattr(config, "LLM_MAX_RETRIES", 2)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 429
+        error = HfHubHTTPError("rate limit", response=mock_resp)
+
+        chunks = [self._make_chunk(t) for t in ["Hello", " world"]]
+        mock_client = MagicMock()
+        mock_client.chat_completion.side_effect = [error, iter(chunks)]
+
+        with patch.object(llm, "_get_client", return_value=mock_client), patch("llm.time.sleep") as mock_sleep:
+            tokens = list(llm.stream_response([{"role": "user", "content": "hi"}]))
+
+        assert tokens == ["Hello", " world"]
+        assert mock_client.chat_completion.call_count == 2
+        mock_sleep.assert_called_once()
+
+    def test_exhausts_retries_still_yields_friendly_message(self, monkeypatch):
+        from huggingface_hub.errors import HfHubHTTPError
+        monkeypatch.setattr(config, "LLM_MAX_RETRIES", 2)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 429
+        error = HfHubHTTPError("rate limit", response=mock_resp)
+
+        mock_client = MagicMock()
+        mock_client.chat_completion.side_effect = [error, error, error]
+
+        with patch.object(llm, "_get_client", return_value=mock_client), patch("llm.time.sleep"):
+            tokens = list(llm.stream_response([]))
+
+        assert len(tokens) == 1
+        assert "rate-limited" in tokens[0].lower()
+        assert mock_client.chat_completion.call_count == 3  # initial + 2 retries
+
+    def test_no_retry_after_partial_tokens_yielded(self, monkeypatch):
+        from huggingface_hub.errors import HfHubHTTPError
+        monkeypatch.setattr(config, "LLM_MAX_RETRIES", 2)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 503
+        error = HfHubHTTPError("loading", response=mock_resp)
+
+        def flaky_stream():
+            yield self._make_chunk("Hello")
+            raise error
+
+        mock_client = MagicMock()
+        mock_client.chat_completion.return_value = flaky_stream()
+
+        with patch.object(llm, "_get_client", return_value=mock_client), patch("llm.time.sleep"):
+            tokens = list(llm.stream_response([]))
+
+        assert tokens[0] == "Hello"
+        assert len(tokens) == 2
+        assert "loading" in tokens[1].lower()
+        assert mock_client.chat_completion.call_count == 1
+
+    def test_backoff_increases_between_retries(self, monkeypatch):
+        from huggingface_hub.errors import HfHubHTTPError
+        monkeypatch.setattr(config, "LLM_MAX_RETRIES", 2)
+        monkeypatch.setattr(config, "LLM_RETRY_BACKOFF_BASE", 1.0)
+        monkeypatch.setattr(config, "LLM_RETRY_BACKOFF_MAX", 8.0)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 429
+        error = HfHubHTTPError("rate limit", response=mock_resp)
+
+        mock_client = MagicMock()
+        mock_client.chat_completion.side_effect = [error, error, error]
+
+        with patch.object(llm, "_get_client", return_value=mock_client), patch("llm.time.sleep") as mock_sleep:
+            list(llm.stream_response([]))
+
+        delays = [call.args[0] for call in mock_sleep.call_args_list]
+        assert delays == [1.0, 2.0]
